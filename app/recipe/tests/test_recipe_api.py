@@ -6,12 +6,15 @@ from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from recipe import serializers
-from core import models
+from recipe.serializers import (
+    RecipeSerializer,
+    DetailRecipeSerializer,
+)
+from core.models import Recipe, Tag
 
 from decimal import Decimal
 
-LIST_RECIPE_URL = reverse('recipe:recipe-list')
+RECIPE_URL = reverse('recipe:recipe-list')
 
 
 def create_recipe(user, **kwargs):
@@ -23,7 +26,7 @@ def create_recipe(user, **kwargs):
         'link': 'http://www.example.com/recipe.pdf',
     }
     default.update(kwargs)
-    recipe = models.Recipe.objects.create(user=user, **default)
+    recipe = Recipe.objects.create(user=user, **default)
     return recipe
 
 
@@ -43,12 +46,12 @@ class TestPublicRecipeApi(TestCase):
             password='test12345',
         )
         create_recipe(user)
-        res = self.client.get(LIST_RECIPE_URL)
+        res = self.client.get(RECIPE_URL)
 
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
-class TestPrivetRecipeApi(TestCase):
+class TestPrivateRecipeApi(TestCase):
 
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -62,10 +65,10 @@ class TestPrivetRecipeApi(TestCase):
     def test_retrieve_recipes(self):
         create_recipe(self.user)
         create_recipe(self.user)
-        recipes = models.Recipe.objects.all().order_by('-id')
-        serialized_recipes = serializers.RecipeSerializer(recipes, many=True)
+        recipes = Recipe.objects.all().order_by('-id')
+        serialized_recipes = RecipeSerializer(recipes, many=True)
 
-        res = self.client.get(LIST_RECIPE_URL)
+        res = self.client.get(RECIPE_URL)
 
         self.assertEqual(res.data, serialized_recipes.data)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
@@ -80,10 +83,10 @@ class TestPrivetRecipeApi(TestCase):
         create_recipe(self.user)
         create_recipe(self.user)
 
-        recipe = models.Recipe.objects.filter(user=self.user).order_by('-id')
-        serialized_recipe = serializers.RecipeSerializer(recipe, many=True)
+        recipe = Recipe.objects.filter(user=self.user).order_by('-id')
+        serialized_recipe = RecipeSerializer(recipe, many=True)
 
-        res = self.client.get(LIST_RECIPE_URL)
+        res = self.client.get(RECIPE_URL)
 
         self.assertEqual(res.data, serialized_recipe.data)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
@@ -93,7 +96,7 @@ class TestPrivetRecipeApi(TestCase):
         create_recipe(self.user)
         DETAIL_RECIPE_URL = detail_url(recipe1.pk)
         res = self.client.get(DETAIL_RECIPE_URL)
-        serialized_recipe = serializers.DetailRecipeSerializer(recipe1)
+        serialized_recipe = DetailRecipeSerializer(recipe1)
 
         self.assertEqual(res.data, serialized_recipe.data)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
@@ -106,8 +109,8 @@ class TestPrivetRecipeApi(TestCase):
             'description': 'the description for the test recipe',
             'link': 'http://www.example.com/recipe.pdf',
         }
-        res = self.client.post(LIST_RECIPE_URL, data=payload)
-        recipe = models.Recipe.objects.get(id=res.data.get('id'))
+        res = self.client.post(RECIPE_URL, data=payload)
+        recipe = Recipe.objects.get(id=res.data.get('id'))
 
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(recipe.user, self.user)
@@ -171,7 +174,7 @@ class TestPrivetRecipeApi(TestCase):
         res = self.client.delete(url)
 
         self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(models.Recipe.objects.filter(id=recipe.id).exists())
+        self.assertFalse(Recipe.objects.filter(id=recipe.id).exists())
 
     def test_delete_other_users_recipe_unsuccessful(self):
         other_user = get_user_model().objects.create_user(
@@ -184,4 +187,42 @@ class TestPrivetRecipeApi(TestCase):
         res = self.client.delete(url)
 
         self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertTrue(models.Recipe.objects.filter(id=recipe.id).exists())
+        self.assertTrue(Recipe.objects.filter(id=recipe.id).exists())
+
+    def test_create_recipe_with_new_tags(self):
+        payload = {
+            'title': 'recipe1',
+            'price': Decimal('50.6'),
+            'time_minutes': 3,
+            'tags': [{'name': 'tag1'}, {'name': 'tag2'}],
+        }
+        res = self.client.post(RECIPE_URL, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        recipes = Recipe.objects.filter(user=self.user)
+        self.assertEqual(recipes.count(), 1)
+        recipe = recipes[0]
+        self.assertEqual(recipe.tags.count(), 2)
+        for tag in payload['tags']:
+            is_exists = recipe.tags.filter(name=tag['name']).exists()
+            self.assertTrue(is_exists)
+
+    def test_create_recipe_with_exist_tags(self):
+        tag1 = Tag.objects.create(user=self.user, name='tag1')
+        payload = {
+            'title': 'recipe1',
+            'price': Decimal('50.6'),
+            'time_minutes': 3,
+            'tags': [{'name': 'tag1'}, {'name': 'tag2'}],
+        }
+        res = self.client.post(RECIPE_URL, payload, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        recipes = Recipe.objects.filter(user=self.user)
+        self.assertEqual(recipes.count(), 1)
+        recipe = recipes[0]
+        self.assertEqual(recipe.tags.count(), 2)
+        self.assertIn(tag1, recipe.tags.all())
+        for tag in payload['tags']:
+            is_exists = recipe.tags.filter(name=tag['name']).exists()
+            self.assertTrue(is_exists)
