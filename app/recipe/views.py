@@ -4,7 +4,7 @@ from recipe.serializers import (
     TagSerializer,
     IngredientSerializer,
 )
-from core.models import Recipe, Tag
+from core.models import Recipe, Tag, Ingredient
 
 from rest_framework import viewsets, mixins
 from rest_framework.authentication import TokenAuthentication
@@ -28,10 +28,11 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+
 class TagViewSet(mixins.UpdateModelMixin,
-                mixins.ListModelMixin,
-                mixins.DestroyModelMixin,
-                viewsets.GenericViewSet):
+                 mixins.ListModelMixin,
+                 mixins.DestroyModelMixin,
+                 viewsets.GenericViewSet):
     serializer_class = TagSerializer
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -43,11 +44,12 @@ class TagViewSet(mixins.UpdateModelMixin,
 
 class IngredientViewSet(mixins.ListModelMixin,
                         mixins.UpdateModelMixin,
-                         viewsets.GenericViewSet):
+                        viewsets.GenericViewSet):
+
     serializer_class = IngredientSerializer
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
-    queryset = Tag.objects.all()
+    queryset = Ingredient.objects.all()
 
     def get_queryset(self):
         return self.queryset.filter(user=self.request.user).order_by('-name')

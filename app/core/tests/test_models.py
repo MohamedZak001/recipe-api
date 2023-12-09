@@ -92,5 +92,5 @@ class TestModels(TestCase):
             user=user,
             name='ing1',
         )
-        
+
         self.assertEqual(str(ingredient), ingredient.name)

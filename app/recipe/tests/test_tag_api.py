@@ -1,7 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
-from decimal import Decimal
 
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -10,6 +9,7 @@ from core.models import Tag
 from recipe.serializers import TagSerializer
 
 TAGS_URL = reverse('recipe:tag-list')
+
 
 def detail_tag(id):
     return reverse('recipe:tag-detail', args=[id])
@@ -26,10 +26,11 @@ class TestPublicTagAPi(TestCase):
 
     def test_list_tags_for_no_authenticated(self):
         user = create_user()
-        tag = Tag.objects.create(user=user, name='tag1')
+        Tag.objects.create(user=user, name='tag1')
         res = self.client.get(TAGS_URL)
 
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
 
 class TestPrivateTagApi(TestCase):
 
@@ -39,8 +40,8 @@ class TestPrivateTagApi(TestCase):
         self.client.force_authenticate(self.user)
 
     def test_list_tags_for_authenticated_user(self):
-        tag = Tag.objects.create(user=self.user, name='tag1')
-        tag2 = Tag.objects.create(user=self.user, name='tag2')
+        Tag.objects.create(user=self.user, name='tag1')
+        Tag.objects.create(user=self.user, name='tag2')
 
         res = self.client.get(TAGS_URL)
 
