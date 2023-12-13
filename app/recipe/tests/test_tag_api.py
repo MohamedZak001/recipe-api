@@ -1,11 +1,12 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from decimal import Decimal
 
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from core.models import Tag
+from core.models import Tag, Recipe
 from recipe.serializers import TagSerializer
 
 TAGS_URL = reverse('recipe:tag-list')
@@ -17,6 +18,19 @@ def detail_tag(id):
 
 def create_user(email='test@example.com', password='12345test'):
     return get_user_model().objects.create_user(email, password)
+
+
+def create_recipe(user, **kwargs):
+    default = {
+        'title': 'recipe 1',
+        'description': 'the description for test recipe',
+        'price': Decimal('50.5'),
+        'time_minutes': 5,
+        'link': 'http://www.example.com/recipe.pdf',
+    }
+    default.update(kwargs)
+    recipe = Recipe.objects.create(user=user, **default)
+    return recipe
 
 
 class TestPublicTagAPi(TestCase):
@@ -94,3 +108,34 @@ class TestPrivateTagApi(TestCase):
 
         self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Tag.objects.filter(id=tag.id).exists())
+
+    def test_filter_tags_by_assigned(self):
+        t1 = Tag.objects.create(user=self.user, name='tag1')
+        t2 = Tag.objects.create(user=self.user, name='tag2')
+        recipe = create_recipe(self.user)
+        recipe.tags.add(t1)
+        payload = {
+            'assigned_only': 1,
+        }
+        serializer1 = TagSerializer(t1)
+        serializer2 = TagSerializer(t2)
+        res = self.client.get(TAGS_URL, payload)
+
+        self.assertIn(serializer1.data, res.data)
+        self.assertNotIn(serializer2.data, res.data)
+
+    def test_filter_tags_by_assigned_distinct(self):
+        t1 = Tag.objects.create(user=self.user, name='tag1')
+        Tag.objects.create(user=self.user, name='tag2')
+        recipe1 = create_recipe(self.user)
+        recipe2 = create_recipe(self.user)
+        recipe1.tags.add(t1)
+        recipe2.tags.add(t1)
+        payload = {
+            'assigned_only': 1,
+        }
+        serializer1 = TagSerializer(t1)
+        res = self.client.get(TAGS_URL, payload)
+
+        self.assertEqual(len(res.data), 1)
+        self.assertIn(serializer1.data, res.data)
